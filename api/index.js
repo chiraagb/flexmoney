@@ -1,8 +1,10 @@
+// index.js (backend)
 import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import { User } from "./models/user.js";
-
+import path from "path";
+const __dirname = path.resolve();
 dotenv.config();
 
 mongoose
@@ -20,6 +22,12 @@ mongoose
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use(express.static(path.join(__dirname, "/client/dist")));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "client", "dist", "index.html"));
+});
+
 // Middleware
 app.use(express.json());
 
@@ -32,6 +40,22 @@ app.post("/api/admission", async (req, res) => {
       return res
         .status(400)
         .json({ success: false, message: "All fields are required" });
+    }
+
+    // Check if the name is already in use
+    const nameExists = await User.exists({ name });
+    if (nameExists) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Name is already in use" });
+    }
+
+    // Check if the selected batch is already taken
+    const batchExists = await User.exists({ selectedBatch });
+    if (batchExists) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Selected batch is already full" });
     }
 
     // Save to MongoDB
@@ -53,6 +77,14 @@ app.post("/api/admission", async (req, res) => {
     }
   } catch (error) {
     console.error(error);
+
+    // Check if the error is a duplicate key error (name already in use)
+    if (error.code === 11000) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Name is already in use" });
+    }
+
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
